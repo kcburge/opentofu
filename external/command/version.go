@@ -66,6 +66,8 @@ func (c *VersionCommand) Run(args []string) int {
 		fmt.Fprintf(&versionString, "-%s", c.VersionPrerelease)
 	}
 
+	fmt.Fprintf(&versionString, " (Nice v0.3.0)")
+
 	// We'll also attempt to print out the selected plugin versions. We do
 	// this based on the dependency lock file, and so the result might be
 	// empty or incomplete if the user hasn't successfully run "tofu init"
