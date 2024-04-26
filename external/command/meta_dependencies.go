@@ -6,6 +6,7 @@ package command
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/opentofu/opentofu/external/depsfile"
 	"github.com/opentofu/opentofu/external/tfdiags"
@@ -29,7 +30,7 @@ import (
 // case. Eventually we will phase out those legacy arguments in favor of the
 // global -chdir=... option, which _does_ preserve the intended invariant
 // that the root module directory is always the current working directory.
-const dependencyLockFilename = ".terraform.lock.hcl"
+const dependencyLockFilename = "lock.hcl"
 
 // lockedDependencies reads the dependency lock information from the lock file
 // in the current working directory.
@@ -50,12 +51,13 @@ func (m *Meta) lockedDependencies() (*depsfile.Locks, tfdiags.Diagnostics) {
 	// with no locks. There is in theory a race condition here in that
 	// the file could be created or removed in the meantime, but we're not
 	// promising to support two concurrent dependency installation processes.
-	_, err := os.Stat(dependencyLockFilename)
+	fn := filepath.Join(m.WorkingDir.DataDir(), dependencyLockFilename)
+	_, err := os.Stat(fn)
 	if os.IsNotExist(err) {
 		return m.annotateDependencyLocksWithOverrides(depsfile.NewLocks()), nil
 	}
 
-	ret, diags := depsfile.LoadLocksFromFile(dependencyLockFilename)
+	ret, diags := depsfile.LoadLocksFromFile(fn)
 	return m.annotateDependencyLocksWithOverrides(ret), diags
 }
 
@@ -63,7 +65,8 @@ func (m *Meta) lockedDependencies() (*depsfile.Locks, tfdiags.Diagnostics) {
 // current working directory to contain the information recorded in the given
 // locks object.
 func (m *Meta) replaceLockedDependencies(new *depsfile.Locks) tfdiags.Diagnostics {
-	return depsfile.SaveLocksToFile(new, dependencyLockFilename)
+	fn := filepath.Join(m.WorkingDir.DataDir(), dependencyLockFilename)
+	return depsfile.SaveLocksToFile(new, fn)
 }
 
 // annotateDependencyLocksWithOverrides modifies the given Locks object in-place
