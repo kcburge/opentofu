@@ -4,9 +4,13 @@
 package tofu
 
 import (
+	"errors"
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/opentofu/opentofu/external/addrs"
+	_addrs "github.com/opentofu/opentofu/external/addrs"
 	"github.com/opentofu/opentofu/external/dag"
 )
 
@@ -25,9 +29,28 @@ type GraphNodeTargetable interface {
 type TargetsTransformer struct {
 	// List of targeted resource names specified by the user
 	Targets []addrs.Targetable
+
+	DependenciesMode DependenciesModeType
 }
 
 func (t *TargetsTransformer) Transform(g *Graph) error {
+	// log.Printf("[TRACE] DEPMOD BEGIN TRANSFORM.")
+
+	dms := os.Getenv("TF_DEPENDENCIES_MODE")
+
+	if len(dms) == 0 {
+		t.DependenciesMode = DependenciesModeTypeInclude
+		log.Print("[DEBUG] Set default dependencies mode.")
+	} else {
+		dm, found := DependenciesModeTypeMap[dms]
+		if !found {
+			return errors.New("don't know how to fail from terraform")
+		}
+
+		t.DependenciesMode = dm
+		log.Printf("[DEBUG] Set dependencies mode %s.", dm)
+	}
+
 	if len(t.Targets) > 0 {
 		targetedNodes, err := t.selectTargetedNodes(g, t.Targets)
 		if err != nil {
@@ -41,6 +64,8 @@ func (t *TargetsTransformer) Transform(g *Graph) error {
 			}
 		}
 	}
+
+	// log.Printf("[TRACE] DEPMOD END   TRANSFORM.")
 
 	return nil
 }
@@ -56,6 +81,7 @@ func (t *TargetsTransformer) selectTargetedNodes(g *Graph, addrs []addrs.Targeta
 	for _, v := range vertices {
 		if t.nodeIsTarget(v, addrs) {
 			targetedNodes.Add(v)
+			// log.Printf("[TRACE] DEPMOD BEGIN TARGET %s.", dag.VertexName(v))
 
 			// We inform nodes that ask about the list of targets - helps for nodes
 			// that need to dynamically expand. Note that this only occurs for nodes
@@ -66,8 +92,46 @@ func (t *TargetsTransformer) selectTargetedNodes(g *Graph, addrs []addrs.Targeta
 
 			deps, _ := g.Ancestors(v)
 			for _, d := range deps {
-				targetedNodes.Add(d)
+				switch t.DependenciesMode {
+
+				case DependenciesModeTypeInclude:
+					targetedNodes.Add(d)
+
+				case DependenciesModeTypeExclude:
+					// only exclude implicit resources
+					dt, ok := d.(GraphNodeConfigResource)
+					if ok {
+						// yep, it's a resource, but is it targeted too?
+						addr := dt.ResourceAddr()
+						if addr.Resource.Mode == _addrs.DataResourceMode {
+							// log.Printf("[TRACE] DEPMOD %s: adding (data).", dag.VertexName(dt))
+							targetedNodes.Add(d)
+						} else if t.nodeIsTarget(d, addrs) {
+							// log.Printf("[TRACE] DEPMOD %s: adding (target).", dag.VertexName(dt))
+						} else {
+							log.Printf("[DEBUG] DEPMOD %s: ignoring.", dag.VertexName(dt))
+						}
+					} else {
+						// always include non-resources
+						// log.Printf("[TRACE] DEPMOD %s: adding (non-config).", dag.VertexName(d))
+						targetedNodes.Add(d)
+					}
+
+				case DependenciesModeTypeFail:
+					dt, ok := d.(GraphNodeConfigResource)
+					if ok {
+						addr := dt.ResourceAddr()
+						if addr.Resource.Mode != _addrs.DataResourceMode && !t.nodeIsTarget(d, addrs) {
+							return nil, fmt.Errorf("%s depends on non-targeted resource %s",
+								dag.VertexName(v), dag.VertexName(d))
+						}
+					}
+
+					targetedNodes.Add(d)
+				}
 			}
+
+			// log.Printf("[TRACE] DEPMOD END   TARGET %s.", dag.VertexName(v))
 		}
 	}
 
@@ -76,6 +140,9 @@ func (t *TargetsTransformer) selectTargetedNodes(g *Graph, addrs []addrs.Targeta
 	// side effects from the targeted nodes, these are added because outputs
 	// cannot be targeted on their own.
 	// Start by finding the root module output nodes themselves
+
+	// KEVIN: the below code just makes sure that outputs for the
+	// above selected targets, are targeted for updating.
 	for _, v := range vertices {
 		// outputs are all temporary value types
 		tv, ok := v.(graphNodeTemporaryValue)
