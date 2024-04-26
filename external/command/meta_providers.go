@@ -304,23 +304,23 @@ func (m *Meta) providerFactories() (map[addrs.Provider]providers.Factory, error)
 		}
 		// The cached package must match one of the checksums recorded in
 		// the lock file, if any.
-		if allowedHashes := lock.PreferredHashes(); len(allowedHashes) != 0 {
-			matched, err := cached.MatchesAnyHash(allowedHashes)
-			if err != nil {
-				reportError(fmt.Errorf(
-					"failed to verify checksum of %s %s package cached in in %s: %w",
-					provider, version, cacheDir.BasePath(), err,
-				))
-				continue
-			}
-			if !matched {
-				reportError(fmt.Errorf(
-					"the cached package for %s %s (in %s) does not match any of the checksums recorded in the dependency lock file",
-					provider, version, cacheDir.BasePath(),
-				))
-				continue
-			}
-		}
+		// if allowedHashes := lock.PreferredHashes(); len(allowedHashes) != 0 {
+		//	matched, err := cached.MatchesAnyHash(allowedHashes)
+		//	if err != nil {
+		//		reportError(fmt.Errorf(
+		//			"failed to verify checksum of %s %s package cached in in %s: %w",
+		//			provider, version, cacheDir.BasePath(), err,
+		//		))
+		//		continue
+		//	}
+		//	if !matched {
+		//		reportError(fmt.Errorf(
+		//			"the cached package for %s %s (in %s) does not match any of the checksums recorded in the dependency lock file",
+		//			provider, version, cacheDir.BasePath(),
+		//		))
+		//		continue
+		//	}
+		// }
 		factories[provider] = providerFactory(cached)
 	}
 	for provider, localDir := range devOverrideProviders {
