@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/opentofu/opentofu/internal/command/cliconfig"
+	"github.com/opentofu/opentofu/external/command/cliconfig"
 )
 
 // globalPluginDirs returns directories that should be searched for
